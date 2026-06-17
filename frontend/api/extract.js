@@ -1,16 +1,15 @@
-// api/extract.js
-// Vercel serverless function for POST /api/extract.
-// Handles both JSON bodies ({ text, docType }) and multipart form uploads
-// (file + docType). Shares the exact extraction logic with the local Express
-// server via ../backend/lib/handler.js.
+// api/extract.js (ESM) — Vercel serverless function for POST /api/extract.
+// Handles JSON bodies ({ text, docType }) and multipart form uploads
+// (file + docType). Shares extraction logic with ../lib/handler.js.
+//
+// The Vercel project Root Directory is `frontend/`, so this function and the
+// code under ../lib are the production extraction path. The Express server in
+// /backend mirrors it for local development.
 
-const Busboy = require('busboy');
-const { handleExtract, MAX_FILE_BYTES } = require('../backend/lib/handler');
+import Busboy from 'busboy';
+import { handleExtract, MAX_FILE_BYTES } from '../lib/handler.js';
 
 // --- Lightweight in-memory rate limiter (best-effort for serverless) ---
-// Note: serverless instances are ephemeral; this throttles per warm instance.
-// For production-grade limiting, front with a gateway / Upstash. This still
-// blunts bursts and satisfies the "rate limit the endpoint" requirement.
 const RATE_WINDOW_MS = 60 * 1000;
 const RATE_MAX = 20;
 const hits = new Map();
@@ -24,7 +23,6 @@ function rateLimited(ip) {
   }
   entry.count += 1;
   hits.set(ip, entry);
-  // Opportunistic cleanup to avoid unbounded growth.
   if (hits.size > 5000) {
     for (const [k, v] of hits) {
       if (now - v.start > RATE_WINDOW_MS) hits.delete(k);
@@ -109,14 +107,13 @@ function parseMultipart(req) {
   });
 }
 
-// Portable JSON responder (works whether or not Vercel augments res.json).
 function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify(payload));
 }
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   // Basic CORS. CORS_ORIGIN can be a comma-separated allow-list.
   const allowed = (process.env.CORS_ORIGIN || '')
     .split(',')
@@ -176,13 +173,11 @@ module.exports = async function handler(req, res) {
   } catch (e) {
     return sendJson(res, 500, { error: 'Unexpected server error. Please try again.' });
   }
-};
+}
 
 // Tell Vercel not to parse the body — we handle JSON and multipart ourselves.
-// Assigned after the handler export so it isn't overwritten.
-module.exports.config = {
+export const config = {
   api: {
     bodyParser: false,
   },
 };
-

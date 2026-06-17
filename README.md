@@ -107,18 +107,19 @@ Only `.env.example` is committed. Your real `.env` is gitignored. **Never commit
 
 ## 📁 Project structure
 
+The Vercel project **Root Directory is `frontend/`** — the app deploys as a single
+Vite project with serverless functions under `frontend/api`. The Express server in
+`backend/` is a mirror for local development.
+
 ```
 DocFlow-AI/
-├── api/
-│   └── extract.js              # Vercel serverless function (POST /api/extract)
-├── backend/
-│   ├── lib/
+├── frontend/                   # ← Vercel Root Directory
+│   ├── api/
+│   │   └── extract.js          # Vercel serverless function (POST /api/extract), ESM
+│   ├── lib/                    # Extraction logic bundled into the function (ESM)
 │   │   ├── schemas.js          # Per-docType JSON schemas
 │   │   ├── extractor.js        # Claude integration (tool-use → strict JSON)
-│   │   └── handler.js          # Shared validation + PDF/TXT text extraction
-│   ├── server.js               # Local Express server (helmet, CORS, rate-limit)
-│   └── package.json
-├── frontend/
+│   │   └── handler.js          # Validation + PDF/TXT text extraction
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── Logo.jsx
@@ -130,8 +131,12 @@ DocFlow-AI/
 │   │   ├── fileRules.js        # Shared file validation (.txt/.pdf, 5MB, max 10)
 │   │   ├── docTypes.js
 │   │   └── export.js           # CSV / JSON export (single + batch)
-│   └── ...
-├── vercel.json
+│   ├── vercel.json            # Serverless function config (memory / maxDuration)
+│   └── package.json
+├── backend/                    # Local-dev Express server (CommonJS mirror)
+│   ├── lib/                    # schemas.js · extractor.js · handler.js
+│   ├── server.js               # Express (helmet, CORS, rate-limit, multer)
+│   └── package.json
 ├── .env.example
 └── README.md
 ```
@@ -140,21 +145,30 @@ DocFlow-AI/
 
 ## ☁️ Deploy to Vercel
 
-The Express logic is also exposed as a serverless function at `/api/extract.js`, and the frontend ships as static files.
+Deployed as a **single service**: a Vite frontend with serverless functions in
+`frontend/api`. No `experimentalServices`, no separate backend service.
 
 1. Push this repo to GitHub.
-2. Import the project in Vercel — `vercel.json` already configures the build, output (`frontend/dist`), and `/api` functions.
+2. Import the project in Vercel and set:
+   - **Root Directory:** `frontend` ← important
+   - **Framework Preset:** Vite (auto-detected)
 3. Add the env var in **Project → Settings → Environment Variables**:
    - `ANTHROPIC_API_KEY` = your key
    - *(optional)* `CORS_ORIGIN` = `https://your-app.vercel.app`
 4. Deploy.
 
-Because the frontend calls `/api/extract` with a relative path, it works identically in dev (Vite proxy) and prod (same origin).
+> **Why Root Directory = `frontend`?** It makes Vercel see one project (Vite +
+> `/api` functions). Pointing it at the repo root triggers Vercel's "multiple
+> services" detection (because `backend/` also has a `package.json`).
+
+Because the frontend calls `/api/extract` with a relative path, it works
+identically in dev (Vite proxy → local Express) and prod (same origin → serverless).
 
 ```bash
-# or via CLI
+# or via CLI, from the frontend/ directory
+cd frontend
 npm i -g vercel
-vercel
+vercel            # link/deploy (Root Directory is already this folder)
 vercel env add ANTHROPIC_API_KEY
 vercel --prod
 ```
